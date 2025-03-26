@@ -1,6 +1,8 @@
 # Team Members
+James Kinlan, John McDonagh, and Matej Saravanja
 
-# Devops Example Project
+# DevOpsSec Group Project
+Team A
 
 # Project Dependencies
 
