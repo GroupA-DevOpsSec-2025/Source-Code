@@ -1,16 +1,15 @@
-# Team Members
-James Kinlan, John McDonagh, and Matej Saravanja
+# DevOpsSec Group Project - Team A
 
-# DevOpsSec Group Project
-Team A
+## Team Members - James Kinlan, John McDonagh, and Matej Saravanja
 
 ---
 
-# Branch Protection Rules
-Source-Code Branch requires editing on temp branch and pull request to main.
+### Branch Protection Rules
+* "Source-Code" Branch requires editing on temp branch and pull request to main.
 
-# Project Dependencies
+### Project Dependencies
 
-# Install Dependencies
+### Install Dependencies
 
-# Run Project
+### Run Project
+
