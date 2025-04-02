@@ -83,7 +83,7 @@ jobs:
       - run:
           name: Execute deployment commands
           command: |
-            REMOTE_SCRIPT=$(cat << 'REMOTE_SCRIPT_EOF'
+            echo '#!/bin/bash
             # Install required packages
             if ! command -v node &>/dev/null; then
               curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
@@ -112,9 +112,10 @@ jobs:
             pm2 delete todo-api 2>/dev/null || true
             pm2 start index.js --name todo-api
             pm2 save
-            sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $EC2_USERNAME --hp /home/$EC2_USERNAME
-            REMOTE_SCRIPT_EOF
-            )
+            sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $EC2_USERNAME --hp /home/$EC2_USERNAME' > remote-script.sh
+
+            scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              remote-script.sh $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
             
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS "$REMOTE_SCRIPT"
+              $EC2_USERNAME@$EC2_PUBLIC_DNS "chmod +x /tmp/remote-script.sh && /tmp/remote-script.sh"
