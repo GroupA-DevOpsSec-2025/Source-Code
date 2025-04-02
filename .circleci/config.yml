@@ -51,11 +51,12 @@ jobs:
       - run:
           name: Prepare deployment
           command: |
-            # Clean existing build directory before creating archive
+            # Create fresh build directory for tar
             rm -rf build_tmp
             mkdir build_tmp
             cp -a build/. build_tmp/
             tar -czf deploy.tar.gz build_tmp/ server/
+            
             echo 'server {
               listen 80 default_server;
               listen [::]:80 default_server;
@@ -99,9 +100,9 @@ jobs:
               sudo npm install -g npm@latest pm2
             fi
             
-            # Clean existing files
+            # Clean existing files with proper permissions
             sudo rm -rf /var/www/html/*
-            rm -rf ~/Source-Code
+            sudo rm -rf ~/Source-Code/build
             
             # Create fresh directories
             mkdir -p ~/Source-Code
@@ -110,7 +111,7 @@ jobs:
             # Extract deployment
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
             
-            # Copy files to web root
+            # Copy files to web root with proper permissions
             sudo cp -a ~/Source-Code/build_tmp/* /var/www/html/
             
             # Configure Nginx
