@@ -19,14 +19,9 @@ jobs:
   build:
     working_directory: ~/Source-Code
     docker:
-      - image: cimg/node:16.14.0
+      - image: cimg/node:20.14.0  # Updated to LTS version
     steps:
       - checkout
-      - run:
-          name: Update npm
-          command: sudo npm install -g npm@latest
-      - restore_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
       - run:
           name: Install dependencies
           command: npm install
@@ -41,7 +36,7 @@ jobs:
   deploy:
     working_directory: ~/Source-Code
     docker:
-      - image: cimg/node:16.14.0
+      - image: cimg/node:20.14.0  # Updated to match build environment
     steps:
       - checkout
       - run:
@@ -86,12 +81,12 @@ jobs:
             REMOTE_SCRIPT="
             set -e
             
-            # Install dependencies if missing
-            if ! command -v node &>/dev/null; then
-              curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+            # Install Node.js 20 if missing
+            if ! command -v node &>/dev/null || [ \"\$(node -v | cut -d'v' -f2 | cut -d'.' -f1)\" -lt 20 ]; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get update
               sudo apt-get install -y nodejs nginx
-              sudo npm install -g pm2
+              sudo npm install -g npm@latest pm2
             fi
             
             # Clean and setup directory
@@ -102,6 +97,7 @@ jobs:
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
             
             # Configure Nginx
+            sudo mkdir -p /etc/nginx/sites-{available,enabled}
             sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
             sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
             sudo nginx -t && sudo systemctl restart nginx
@@ -115,7 +111,6 @@ jobs:
             pm2 start index.js --name todo-api
             pm2 save
             
-            # Output PM2 startup command
             echo \"Run this command to enable PM2 startup:\"
             echo \"sudo env PATH=\\\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \\\$USER --hp \\\$HOME\"
             "
