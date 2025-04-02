@@ -68,24 +68,50 @@ jobs:
               }
             }' > nginx-config
       - run:
+          name: Setup SSH connection
+          command: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/ec2_key
+            chmod 600 ~/.ssh/ec2_key
+            ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
+      - run:
           name: Transfer files to EC2
-          command: scp -o StrictHostKeyChecking=no deploy.tar.gz nginx-config $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
+          command: |
+            scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              deploy.tar.gz nginx-config \
+              $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
       - run:
           name: Execute deployment commands
           command: |
-            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS "\
-              command -v node >/dev/null 2>&1 || {\
-                curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - ;\
-                sudo apt-get install -y nodejs nginx ;\
-                sudo npm install -g pm2 ;\
-              } ;\
-              rm -rf ~/Source-Code ;\
-              mkdir -p ~/Source-Code ;\
-              tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code ;\
-              sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app ;\
-              sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled ;\
-              sudo nginx -t && sudo systemctl restart nginx ;\
-              cd ~/Source-Code/server && npm install --production ;\
-              pm2 delete todo-api 2>/dev/null || true ;\
-              pm2 start index.js --name todo-api ;\
-              pm2 save"
+            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              $EC2_USERNAME@$EC2_PUBLIC_DNS << 'EOF'
+              # Install required packages
+              if ! command -v node &>/dev/null; then
+                curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+                sudo apt-get update
+                sudo apt-get install -y nodejs nginx
+                sudo npm install -g pm2
+              fi
+              
+              # Clean and setup directory
+              rm -rf ~/Source-Code
+              mkdir -p ~/Source-Code
+              
+              # Extract deployment
+              tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
+              
+              # Configure Nginx
+              sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
+              sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
+              sudo nginx -t && sudo systemctl restart nginx
+              
+              # Setup backend
+              cd ~/Source-Code/server
+              npm install --production
+              
+              # Manage process
+              pm2 delete todo-api 2>/dev/null || true
+              pm2 start index.js --name todo-api
+              pm2 save
+              sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $EC2_USERNAME --hp /home/$EC2_USERNAME
+              EOF
