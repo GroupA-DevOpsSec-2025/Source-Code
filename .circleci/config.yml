@@ -4,10 +4,7 @@ workflows:
   version: 2
   build-deploy:
     jobs:
-      - build:
-          filters:
-            branches:
-              only: main
+      - build
       - deploy:
           requires:
             - build
@@ -19,7 +16,7 @@ jobs:
   build:
     working_directory: ~/Source-Code
     docker:
-      - image: circleci/node:10.16.3
+      - image: circleci/node:16.14.0
     steps:
       - checkout
       - restore_cache:
@@ -41,7 +38,7 @@ jobs:
   deploy:
     working_directory: ~/Source-Code
     docker:
-      - image: circleci/node:10.16.3
+      - image: circleci/node:16.14.0
     steps:
       - attach_workspace:
           at: .
@@ -52,11 +49,9 @@ jobs:
           name: Create deployment package
           command: tar -czf deploy.tar.gz build/ server/
       - run:
-          name: Deploy to EC2
+          name: Generate Nginx config
           command: |
-            # Create Nginx config locally first
-            cat << 'EOF' > nginx-config
-            server {
+            echo 'server {
               listen 80;
               server_name _;
               root /home/ubuntu/Source-Code/build;
@@ -71,40 +66,26 @@ jobs:
                 proxy_set_header Upgrade \$http_upgrade;
                 proxy_set_header Connection "upgrade";
               }
-            }
-            EOF
-            
-            # Transfer files
-            scp -o StrictHostKeyChecking=no deploy.tar.gz nginx-config $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
-            
-            # Execute remote commands
-            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS << 'REMOTE_SCRIPT'
-            #!/bin/bash
-            # Install required packages if missing
-            command -v node >/dev/null 2>&1 || {
-              curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-              sudo apt-get install -y nodejs nginx
-              sudo npm install -g pm2
-            }
-            
-            # Clean and prepare deployment directory
-            rm -rf ~/Source-Code
-            mkdir -p ~/Source-Code
-            
-            # Extract new deployment
-            tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
-            
-            # Configure Nginx
-            sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
-            sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
-            sudo nginx -t && sudo systemctl restart nginx
-            
-            # Install backend dependencies
-            cd ~/Source-Code/server
-            npm install --production
-            
-            # Start/restart backend
-            pm2 delete todo-api 2>/dev/null || true
-            pm2 start index.js --name todo-api
-            pm2 save
-            REMOTE_SCRIPT
+            }' > nginx-config
+      - run:
+          name: Transfer files to EC2
+          command: scp -o StrictHostKeyChecking=no deploy.tar.gz nginx-config $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
+      - run:
+          name: Execute deployment commands
+          command: |
+            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS "\
+              command -v node >/dev/null 2>&1 || {\
+                curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - ;\
+                sudo apt-get install -y nodejs nginx ;\
+                sudo npm install -g pm2 ;\
+              } ;\
+              rm -rf ~/Source-Code ;\
+              mkdir -p ~/Source-Code ;\
+              tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code ;\
+              sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app ;\
+              sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled ;\
+              sudo nginx -t && sudo systemctl restart nginx ;\
+              cd ~/Source-Code/server && npm install --production ;\
+              pm2 delete todo-api 2>/dev/null || true ;\
+              pm2 start index.js --name todo-api ;\
+              pm2 save"
