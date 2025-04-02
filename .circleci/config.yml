@@ -68,12 +68,20 @@ jobs:
               }
             }' > nginx-config
       - run:
-          name: Setup SSH connection
+          name: Verify and setup SSH
           command: |
+            if [ -z "$EC2_PUBLIC_DNS" ] || [ -z "$EC2_USERNAME" ] || [ -z "$SSH_PRIVATE_KEY" ]; then
+              echo "ERROR: Missing required environment variables"
+              echo "EC2_PUBLIC_DNS: ${EC2_PUBLIC_DNS:-not set}"
+              echo "EC2_USERNAME: ${EC2_USERNAME:-not set}"
+              exit 1
+            fi
+            
             mkdir -p ~/.ssh
             echo "$SSH_PRIVATE_KEY" > ~/.ssh/ec2_key
             chmod 600 ~/.ssh/ec2_key
-            ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
+            
+            ssh-keyscan -H $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts 2>/dev/null
       - run:
           name: Transfer files to EC2
           command: |
@@ -84,35 +92,43 @@ jobs:
           name: Execute deployment commands
           command: |
             echo '#!/bin/bash
-            # Install required packages
-            if ! command -v node &>/dev/null; then
-              curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-              sudo apt-get update
-              sudo apt-get install -y nodejs nginx
-              sudo npm install -g pm2
-            fi
-            
-            # Clean and setup directory
+            set -e  # Exit immediately on error
+
+            # Update and install system dependencies
+            sudo apt-get update -y
+            sudo apt-get install -y curl gnupg2
+            curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+            sudo apt-get install -y nodejs nginx
+
+            # Install PM2
+            sudo npm install -g pm2
+
+            # Create Nginx directories if they don'\''t exist
+            sudo mkdir -p /etc/nginx/sites-{available,enabled}
+
+            # Deploy application files
             rm -rf ~/Source-Code
             mkdir -p ~/Source-Code
-            
-            # Extract deployment
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
-            
+
             # Configure Nginx
             sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
             sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
             sudo nginx -t && sudo systemctl restart nginx
-            
-            # Setup backend
+
+            # Install backend dependencies
             cd ~/Source-Code/server
-            npm install --production
-            
-            # Manage process
+            npm install --omit=dev
+
+            # Start application with PM2
             pm2 delete todo-api 2>/dev/null || true
             pm2 start index.js --name todo-api
             pm2 save
-            sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $EC2_USERNAME --hp /home/$EC2_USERNAME' > remote-script.sh
+
+            # Set up PM2 startup (output command for manual run)
+            echo "Run this command to enable PM2 startup:"
+            echo "sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $EC2_USERNAME --hp /home/$EC2_USERNAME"
+            ' > remote-script.sh
 
             scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               remote-script.sh $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
