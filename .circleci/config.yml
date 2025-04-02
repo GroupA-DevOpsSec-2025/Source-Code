@@ -52,15 +52,12 @@ jobs:
             chmod 600 ~/.ssh/ec2_key
             ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
       - run:
-          name: Build and deploy application
+          name: Build application
+          command: npm run build
+      - run:
+          name: Prepare deployment
           command: |
-            # Build React app
-            npm run build
-            
-            # Create deployment package
             tar -czf deploy.tar.gz build/ server/
-            
-            # Generate Nginx config
             echo 'server {
               listen 80;
               server_name _;
@@ -77,16 +74,16 @@ jobs:
                 proxy_set_header Connection "upgrade";
               }
             }' > nginx-config
-            
-            # Transfer files
+      - run:
+          name: Transfer files
+          command: |
             scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               deploy.tar.gz nginx-config \
               $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
-            
-            # Execute deployment commands
-            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS << 'DEPLOY_SCRIPT'
-            #!/bin/bash
+      - run:
+          name: Execute deployment
+          command: |
+            REMOTE_SCRIPT="
             set -e
             
             # Install dependencies if missing
@@ -119,6 +116,9 @@ jobs:
             pm2 save
             
             # Output PM2 startup command
-            echo "Run this command to enable PM2 startup:"
-            echo "sudo env PATH=\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \$USER --hp \$HOME"
-            DEPLOY_SCRIPT
+            echo \"Run this command to enable PM2 startup:\"
+            echo \"sudo env PATH=\\\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \\\$USER --hp \\\$HOME\"
+            "
+            
+            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              $EC2_USERNAME@$EC2_PUBLIC_DNS "$REMOTE_SCRIPT"
