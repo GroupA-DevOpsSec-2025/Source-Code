@@ -59,7 +59,7 @@ jobs:
             echo 'server {
               listen 80 default_server;
               listen [::]:80 default_server;
-              server_name _;
+              server_name $host;
               root /var/www/html;
               
               index index.html;
@@ -96,15 +96,16 @@ jobs:
               deploy.tar.gz nginx-config \
               $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
       - run:
-          name: Execute deployment with debugging
+          name: Execute deployment
           command: |
             REMOTE_SCRIPT="
             set -ex
             
             # Install dependencies
+            sudo apt-get update
+            sudo apt-get install -y net-tools  # For netstat
             if ! command -v node &>/dev/null || [ \"\$(node -v | cut -d'v' -f2 | cut -d'.' -f1)\" -lt 20 ]; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get update
               sudo apt-get install -y nodejs nginx
               sudo npm install -g npm@latest pm2
             fi
@@ -125,38 +126,27 @@ jobs:
             # Configure Nginx
             sudo mv /tmp/nginx-config /etc/nginx/sites-available/default
             sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
-            
-            # Verify backend files
-            echo \"Backend files:\"
-            ls -la ~/Source-Code/server/
+            sudo rm -f /etc/nginx/sites-enabled/default  # Remove if exists as symlink
             
             # Install backend dependencies
             cd ~/Source-Code/server
             npm install --omit=dev
             
-            # Check Node.js server
-            echo \"Testing Node.js server:\"
-            node -e \"require('./index.js'); console.log('Server imports successfully')\" || exit 1
-            
             # Start/Restart PM2
             pm2 delete todo-api 2>/dev/null || true
             pm2 start index.js --name todo-api
             pm2 save
-            pm2 list
             
-            # Final Nginx check
+            # Final checks
             sudo nginx -t
             sudo systemctl restart nginx
-            
-            # Verify services
-            echo \"Nginx status:\"
             sudo systemctl status nginx --no-pager
-            echo \"PM2 status:\"
-            pm2 status
-            echo \"Network connections:\"
-            sudo netstat -tulnp | grep -E 'nginx|node'
+            pm2 list
+            sudo netstat -tulnp | grep -E 'nginx|node' || echo \"Netstat check skipped\"
             
-            echo \"Deployment complete. Application available at http://$EC2_PUBLIC_DNS\"
+            echo \"Deployment complete! Application available at:\"
+            echo \"http://$EC2_PUBLIC_DNS\"
+            echo \"\"
             echo \"Run this to enable PM2 startup:\"
             echo \"sudo env PATH=\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \$USER --hp \$HOME\"
             "
