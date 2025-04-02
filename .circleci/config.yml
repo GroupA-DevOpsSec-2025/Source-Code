@@ -123,7 +123,7 @@ jobs:
             # Setup backend with proper API routes
             cd ~/Source-Code/server
             npm install cors express
-            cat << 'EOF' > index.js
+            cat \<< 'EOF' > index.js
             const express = require('express');
             const cors = require('cors');
             const app = express();
