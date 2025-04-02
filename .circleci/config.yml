@@ -51,7 +51,6 @@ jobs:
       - run:
           name: Prepare deployment
           command: |
-            # Create fresh build directory for tar
             rm -rf build_tmp
             mkdir build_tmp
             cp -a build/. build_tmp/
@@ -60,17 +59,27 @@ jobs:
             echo 'server {
               listen 80 default_server;
               listen [::]:80 default_server;
+              server_name _;
               root /var/www/html;
               
+              index index.html;
+              
               location / {
-                try_files \$uri /index.html;
+                try_files $uri $uri/ /index.html;
               }
               
               location /api {
                 proxy_pass http://localhost:3001;
                 proxy_http_version 1.1;
-                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_cache_bypass $http_upgrade;
+              }
+              
+              error_page 500 502 503 504 /50x.html;
+              location = /50x.html {
+                root /usr/share/nginx/html;
               }
             }' > nginx-config
       - run:
@@ -87,12 +96,12 @@ jobs:
               deploy.tar.gz nginx-config \
               $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
       - run:
-          name: Execute deployment
+          name: Execute deployment with debugging
           command: |
             REMOTE_SCRIPT="
-            set -e
+            set -ex
             
-            # Install Node.js 20 if missing
+            # Install dependencies
             if ! command -v node &>/dev/null || [ \"\$(node -v | cut -d'v' -f2 | cut -d'.' -f1)\" -lt 20 ]; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get update
@@ -100,42 +109,56 @@ jobs:
               sudo npm install -g npm@latest pm2
             fi
             
-            # Clean existing files with proper permissions
+            # Clean deployment area
             sudo rm -rf /var/www/html/*
-            sudo rm -rf ~/Source-Code/build
-            
-            # Create fresh directories
+            rm -rf ~/Source-Code
             mkdir -p ~/Source-Code
-            sudo mkdir -p /var/www/html
             
-            # Extract deployment
+            # Extract files
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
             
-            # Copy files to web root with proper permissions
+            # Deploy frontend
             sudo cp -a ~/Source-Code/build_tmp/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
+            sudo chmod -R 755 /var/www/html
             
             # Configure Nginx
             sudo mv /tmp/nginx-config /etc/nginx/sites-available/default
             sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
             
-            # Set proper permissions
-            sudo chown -R www-data:www-data /var/www/html
-            sudo chmod -R 755 /var/www/html
+            # Verify backend files
+            echo \"Backend files:\"
+            ls -la ~/Source-Code/server/
             
-            # Restart Nginx
-            sudo nginx -t && sudo systemctl restart nginx
-            
-            # Setup backend
+            # Install backend dependencies
             cd ~/Source-Code/server
             npm install --omit=dev
             
-            # Start application with PM2
+            # Check Node.js server
+            echo \"Testing Node.js server:\"
+            node -e \"require('./index.js'); console.log('Server imports successfully')\" || exit 1
+            
+            # Start/Restart PM2
             pm2 delete todo-api 2>/dev/null || true
             pm2 start index.js --name todo-api
             pm2 save
+            pm2 list
             
-            echo \"Run this command to enable PM2 startup:\"
-            echo \"sudo env PATH=\\\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \\\$USER --hp \\\$HOME\"
+            # Final Nginx check
+            sudo nginx -t
+            sudo systemctl restart nginx
+            
+            # Verify services
+            echo \"Nginx status:\"
+            sudo systemctl status nginx --no-pager
+            echo \"PM2 status:\"
+            pm2 status
+            echo \"Network connections:\"
+            sudo netstat -tulnp | grep -E 'nginx|node'
+            
+            echo \"Deployment complete. Application available at http://$EC2_PUBLIC_DNS\"
+            echo \"Run this to enable PM2 startup:\"
+            echo \"sudo env PATH=\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \$USER --hp \$HOME\"
             "
             
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
