@@ -57,15 +57,12 @@ jobs:
             tar -czf deploy.tar.gz build_tmp/ server/
             
             echo 'server {
-              listen 80 default_server;
-              listen [::]:80 default_server;
-              server_name $host;
+              listen 80;
+              server_name _;
               root /var/www/html;
               
-              index index.html;
-              
               location / {
-                try_files $uri $uri/ /index.html;
+                try_files $uri /index.html;
               }
               
               location /api {
@@ -74,12 +71,6 @@ jobs:
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection "upgrade";
                 proxy_set_header Host $host;
-                proxy_cache_bypass $http_upgrade;
-              }
-              
-              error_page 500 502 503 504 /50x.html;
-              location = /50x.html {
-                root /usr/share/nginx/html;
               }
             }' > nginx-config
       - run:
@@ -102,15 +93,14 @@ jobs:
             set -ex
             
             # Install dependencies
-            sudo apt-get update
-            sudo apt-get install -y net-tools  # For netstat
-            if ! command -v node &>/dev/null || [ \"\$(node -v | cut -d'v' -f2 | cut -d'.' -f1)\" -lt 20 ]; then
+            if ! command -v node &>/dev/null; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get update
               sudo apt-get install -y nodejs nginx
               sudo npm install -g npm@latest pm2
             fi
             
-            # Clean deployment area
+            # Clean and setup directories
             sudo rm -rf /var/www/html/*
             rm -rf ~/Source-Code
             mkdir -p ~/Source-Code
@@ -124,28 +114,38 @@ jobs:
             sudo chmod -R 755 /var/www/html
             
             # Configure Nginx
-            sudo mv /tmp/nginx-config /etc/nginx/sites-available/default
-            sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
-            sudo rm -f /etc/nginx/sites-enabled/default  # Remove if exists as symlink
+            sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
+            sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
+            sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
             
-            # Install backend dependencies
+            # Verify backend
             cd ~/Source-Code/server
             npm install --omit=dev
             
-            # Start/Restart PM2
+            # Test API connection
+            if ! curl -s http://localhost:3001/api >/dev/null; then
+              echo \"Starting Node server for testing...\"
+              node index.js &
+              sleep 2
+              curl -v http://localhost:3001/api || {
+                echo \"API failed to start\"
+                exit 1
+              }
+              pkill node
+            fi
+            
+            # Start with PM2
             pm2 delete todo-api 2>/dev/null || true
             pm2 start index.js --name todo-api
             pm2 save
             
-            # Final checks
-            sudo nginx -t
-            sudo systemctl restart nginx
-            sudo systemctl status nginx --no-pager
-            pm2 list
-            sudo netstat -tulnp | grep -E 'nginx|node' || echo \"Netstat check skipped\"
+            # Restart Nginx
+            sudo nginx -t && sudo systemctl restart nginx
             
-            echo \"Deployment complete! Application available at:\"
-            echo \"http://$EC2_PUBLIC_DNS\"
+            echo \"\"
+            echo \"Deployment successful!\"
+            echo \"Frontend: http://$EC2_PUBLIC_DNS\"
+            echo \"API: http://$EC2_PUBLIC_DNS/api\"
             echo \"\"
             echo \"Run this to enable PM2 startup:\"
             echo \"sudo env PATH=\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \$USER --hp \$HOME\"
