@@ -95,6 +95,12 @@ jobs:
               sudo npm install -g npm@latest pm2
             fi
             
+            # Remove default Nginx config
+            sudo rm -f /etc/nginx/sites-enabled/default
+            
+            # Ensure Nginx directories exist
+            sudo mkdir -p /etc/nginx/sites-{available,enabled}
+            
             # Clean and setup directory
             rm -rf ~/Source-Code
             mkdir -p ~/Source-Code
@@ -103,9 +109,14 @@ jobs:
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
             
             # Configure Nginx
-            sudo mkdir -p /etc/nginx/sites-{available,enabled}
             sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
             sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
+            
+            # Set proper permissions
+            sudo chown -R www-data:www-data /home/ubuntu/Source-Code/build
+            sudo chmod -R 755 /home/ubuntu/Source-Code/build
+            
+            # Restart Nginx
             sudo nginx -t && sudo systemctl restart nginx
             
             # Setup backend
