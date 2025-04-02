@@ -54,57 +54,54 @@ jobs:
       - run:
           name: Deploy to EC2
           command: |
-            # Create Nginx config locally first
-            cat << 'EOF' > nginx-config
-            server {
-              listen 80;
-              server_name _;
-              root /home/ubuntu/Source-Code/build;
-              
-              location / {
-                try_files \$uri /index.html;
+            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS "
+              # Install required packages if missing
+              command -v node >/dev/null 2>&1 || {
+                curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+                sudo apt-get install -y nodejs nginx
+                sudo npm install -g pm2
               }
               
-              location /api {
-                proxy_pass http://localhost:3001;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade \$http_upgrade;
-                proxy_set_header Connection "upgrade";
+              # Clean and prepare deployment directory
+              rm -rf ~/Source-Code
+              mkdir -p ~/Source-Code
+              
+              # Extract new deployment
+              tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
+              
+              # Configure Nginx
+              sudo bash -c 'cat > /etc/nginx/sites-available/todo-app << \"EOF\"
+              server {
+                listen 80;
+                server_name _;
+                root /home/ubuntu/Source-Code/build;
+                
+                location / {
+                  try_files \$uri /index.html;
+                }
+                
+                location /api {
+                  proxy_pass http://localhost:3001;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection \"upgrade\";
+                }
               }
-            }
-            EOF
+              EOF'
+              
+              # Activate Nginx config
+              sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
+              sudo nginx -t && sudo systemctl restart nginx
+              
+              # Install backend dependencies
+              cd ~/Source-Code/server
+              npm install --production
+              
+              # Start/restart backend
+              pm2 delete todo-api 2>/dev/null || true
+              pm2 start index.js --name todo-api
+              pm2 save
+            "
             
-            # Transfer files
-            scp -o StrictHostKeyChecking=no deploy.tar.gz nginx-config $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
-            
-            # Execute remote commands
-            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS << 'REMOTE_SCRIPT'
-            #!/bin/bash
-            # Install required packages if missing
-            command -v node >/dev/null 2>&1 || {
-              curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-              sudo apt-get install -y nodejs nginx
-              sudo npm install -g pm2
-            }
-            
-            # Clean and prepare deployment directory
-            rm -rf ~/Source-Code
-            mkdir -p ~/Source-Code
-            
-            # Extract new deployment
-            tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
-            
-            # Configure Nginx
-            sudo mv /tmp/nginx-config /etc/nginx/sites-available/todo-app
-            sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
-            sudo nginx -t && sudo systemctl restart nginx
-            
-            # Install backend dependencies
-            cd ~/Source-Code/server
-            npm install --production
-            
-            # Start/restart backend
-            pm2 delete todo-api 2>/dev/null || true
-            pm2 start index.js --name todo-api
-            pm2 save
-            REMOTE_SCRIPT
+            # Transfer files after commands are ready
+            scp -o StrictHostKeyChecking=no deploy.tar.gz $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
