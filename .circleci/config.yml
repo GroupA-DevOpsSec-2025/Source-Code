@@ -1,31 +1,107 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/jobs-steps/#jobs-overview & https://circleci.com/docs/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/executor-intro/ & https://circleci.com/docs/configuration-reference/#executor-job
-    docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
-
-    # Add steps to the job
-    # See: https://circleci.com/docs/jobs-steps/#steps-overview & https://circleci.com/docs/configuration-reference/#steps
-    steps:
-      # Checkout the code as the first step.
-      - checkout
-      - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
-
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  version: 2
+  build-deploy:
     jobs:
-      - say-hello
+      - build:
+          filters:
+            branches:
+              only: main
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main
+
+jobs:
+  build:
+    working_directory: ~/Source-Code
+    docker:
+      - image: circleci/node:10.16.3
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+      - run:
+          name: Install dependencies
+          command: npm install
+      - save_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ./node_modules
+      - run:
+          name: Run tests
+          command: npm test
+      - persist_to_workspace:
+          root: .
+          paths: .
+
+  deploy:
+    working_directory: ~/Source-Code
+    docker:
+      - image: circleci/node:10.16.3
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Build application
+          command: npm run build
+      - run:
+          name: Create deployment package
+          command: tar -czf deploy.tar.gz build/ server/
+      - run:
+          name: Deploy to EC2
+          command: |
+            ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_PUBLIC_DNS "
+              # Install required packages if missing
+              command -v node >/dev/null 2>&1 || {
+                curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+                sudo apt-get install -y nodejs nginx
+                sudo npm install -g pm2
+              }
+              
+              # Clean and prepare deployment directory
+              rm -rf ~/Source-Code
+              mkdir -p ~/Source-Code
+              
+              # Extract new deployment
+              tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
+              
+              # Configure Nginx
+              sudo bash -c 'cat > /etc/nginx/sites-available/todo-app << \"EOF\"
+              server {
+                listen 80;
+                server_name _;
+                root /home/ubuntu/Source-Code/build;
+                
+                location / {
+                  try_files \$uri /index.html;
+                }
+                
+                location /api {
+                  proxy_pass http://localhost:3001;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection \"upgrade\";
+                }
+              }
+              EOF'
+              
+              # Activate Nginx config
+              sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled
+              sudo nginx -t && sudo systemctl restart nginx
+              
+              # Install backend dependencies
+              cd ~/Source-Code/server
+              npm install --production
+              
+              # Start/restart backend
+              pm2 delete todo-api 2>/dev/null || true
+              pm2 start index.js --name todo-api
+              pm2 save
+            "
+            
+            # Transfer files after commands are ready
+            scp -o StrictHostKeyChecking=no deploy.tar.gz $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
