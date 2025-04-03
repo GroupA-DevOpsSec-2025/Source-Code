@@ -31,6 +31,13 @@ jobs:
       - run:
           name: Run tests
           command: npm test
+      - run:
+          name: Verify API endpoints
+          command: |
+            if grep -r "localhost:3001/todos" src/; then
+              echo "ERROR: Found localhost API references in frontend code!"
+              exit 1
+            fi
       - persist_to_workspace:
           root: .
           paths: .
@@ -73,6 +80,10 @@ jobs:
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Content-Type $content_type;
+                proxy_buffering off;
+                proxy_read_timeout 300s;
               }
             }' > nginx-config
       - run:
@@ -109,6 +120,7 @@ jobs:
             
             # Extract files
             tar -xzf /tmp/deploy.tar.gz -C ~/Source-Code
+            sudo chown -R $EC2_USERNAME:$EC2_USERNAME ~/Source-Code
             
             # Deploy frontend
             sudo cp -a ~/Source-Code/build_tmp/* /var/www/html/
@@ -120,21 +132,25 @@ jobs:
             sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
             sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
             
-            # Setup backend with proper API routes
+            # Setup backend
             cd ~/Source-Code/server
-            npm install cors express
+            npm install express cors
             cat \<< 'EOF' > index.js
             const express = require('express');
             const cors = require('cors');
             const app = express();
             
-            app.use(cors());
+            app.use(cors({
+              origin: 'http://ec2-3-95-15-62.compute-1.amazonaws.com',
+              methods: ['GET', 'POST', 'PUT', 'DELETE'],
+              allowedHeaders: ['Content-Type']
+            }));
+            
             app.use(express.json());
             
             let todos = [];
             let currentId = 1;
             
-            // Todo List API
             app.get('/api/todos', (req, res) => {
               res.json(todos);
             });
@@ -175,16 +191,17 @@ jobs:
             
             # Start with PM2
             pm2 delete todo-api 2>/dev/null || true
-            pm2 start index.js --name todo-api
+            pm2 start index.js --name todo-api --wait-ready
             pm2 save
+            pm2 startup || true
             
             # Restart Nginx
             sudo nginx -t && sudo systemctl restart nginx
             
             # Verify API
             echo \"Testing API...\"
-            curl -X POST -H \"Content-Type: application/json\" -d '{\"text\":\"test todo\"}' /api/todos
-            curl /api/todos
+            curl -X POST -H \"Content-Type: application/json\" -d '{\"text\":\"test todo\"}' http://localhost:3001/api/todos
+            curl http://localhost:3001/api/todos
             
             echo \"\"
             echo \"Deployment successful!\"
@@ -194,9 +211,6 @@ jobs:
             echo \"  POST   http://$EC2_PUBLIC_DNS/api/todos\"
             echo \"  PUT    http://$EC2_PUBLIC_DNS/api/todos/:id\"
             echo \"  DELETE http://$EC2_PUBLIC_DNS/api/todos/:id\"
-            echo \"\"
-            echo \"Run this to enable PM2 startup:\"
-            echo \"sudo env PATH=\$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u \$USER --hp \$HOME\"
             "
             
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
