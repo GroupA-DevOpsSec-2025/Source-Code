@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import './TodoList.css'; // Import the CSS file
+import './TodoList.css'; 
+
+const API_BASE = process.env.REACT_APP_API_BASE || '/api/todos';
 
 function TodoList() {
     const [todos, setTodos] = useState([]);
