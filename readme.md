@@ -16,7 +16,9 @@ To do App
 * To run locally:
     1. Start "GitBash"
     2. "cd" to project root folder "Source-Code"
-    3. Run "node index.js"
-    4. Start second window of "GitBash"
-    5. "cd" to project root folder "Source-Code"
-    6. Run "npm run start"
+    3. "cd" to "server" folder"
+    4. Run "npm install"
+    5. Run "node index.js"
+    6. Start second window of "GitBash"
+    7. "cd" to project root folder "Source-Code"
+    8. Run "npm run start"
