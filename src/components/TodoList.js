@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import Todo from "./Todo";
 
 const API_BASE = '/api/todos';
 
