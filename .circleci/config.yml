@@ -183,8 +183,8 @@ jobs:
             
             # Verify API
             echo \"Testing API...\"
-            curl -X POST -H \"Content-Type: application/json\" -d '{\"text\":\"test todo\"}' http://localhost:3001/api/todos
-            curl http://localhost:3001/api/todos
+            curl -X POST -H \"Content-Type: application/json\" -d '{\"text\":\"test todo\"}' /api/todos
+            curl /api/todos
             
             echo \"\"
             echo \"Deployment successful!\"
