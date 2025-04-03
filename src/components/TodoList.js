@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-
-const API_BASE = '/api/todos';
+import './TodoList.css'; // Import the CSS file
 
 function TodoList() {
     const [todos, setTodos] = useState([]);
@@ -102,50 +101,76 @@ function TodoList() {
     }
 
     return (
-        <div>
-            <input 
-                value={text} 
-                onChange={(e) => setText(e.target.value)} 
-                placeholder="Add new todo"
-            />
-            <button onClick={handleSubmit}>Add ToDo</button>
-            <ul>
-                {todos.map((todo) => (
-                    <li key={todo.id}>
-                        {todo.isInEditingMode ? (
-                            <>
-                                <input
-                                    value={updateText}
-                                    onChange={(e) => setUpdateText(e.target.value)}
-                                />
-                                <button onClick={(e) => handleUpdate(e, todo.id)}>
-                                    Done
-                                </button>
-                            </>
-                        ) : (
-                            <>
+        <div className="todo-container">
+            <h1 className="todo-header">Your To Do List</h1>
+            
+            <div className="add-section">
+                <h2 className="section-title">Add New Items</h2>
+                <div className="input-container">
+                    <input
+                        className="todo-input"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="Enter new todo..."
+                    />
+                    <button className="add-button" onClick={handleSubmit}>
+                        Add
+                    </button>
+                </div>
+            </div>
+            
+            <div className="list-section">
+                <h2 className="section-title">Current List</h2>
+                <ul className="todo-list">
+                    {todos.map((todo) => (
+                        <li key={todo.id} className="todo-item">
+                            <div className="todo-content">
                                 <input
                                     type="checkbox"
                                     checked={todo.completed || false}
                                     onChange={() => handleToggleComplete(todo.id)}
+                                    className="todo-checkbox"
                                 />
-                                <span style={{ 
-                                    textDecoration: todo.completed ? 'line-through' : 'none',
-                                    margin: '0 10px'
-                                }}>
+                                <span className={`todo-text ${todo.completed ? 'completed-todo' : ''}`}>
                                     {todo.text}
                                 </span>
-                                <button onClick={(e) => handleDelete(e, todo.id)}>
-                                    Delete
-                                </button>
-                                <button onClick={(e) => handleEdit(e, todo.id)}>
-                                    Edit
-                                </button>
-                            </>
-                        )}
-                    </li>
-                ))}
-            </ul>
+                            </div>
+                            <div className="button-group">
+                                {todo.isInEditingMode ? (
+                                    <>
+                                        <input
+                                            className="edit-input"
+                                            value={updateText}
+                                            onChange={(e) => setUpdateText(e.target.value)}
+                                        />
+                                        <button 
+                                            className="done-button"
+                                            onClick={(e) => handleUpdate(e, todo.id)}
+                                        >
+                                            Done
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button 
+                                            className="edit-button"
+                                            onClick={(e) => handleEdit(e, todo.id)}
+                                        >
+                                            Edit
+                                        </button>
+                                        <button 
+                                            className="delete-button"
+                                            onClick={(e) => handleDelete(e, todo.id)}
+                                        >
+                                            Delete
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
         </div>
     );
 }
