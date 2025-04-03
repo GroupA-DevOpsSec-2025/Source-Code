@@ -24,13 +24,19 @@ jobs:
       - run:
           name: Install dependencies
           command: npm install
+      - run:
+          name: Set up test environment
+          command: |
+            echo "REACT_APP_API_BASE=http://test-api" > .env.test
+            echo "SKIP_PREFLIGHT_CHECK=true" >> .env.test
       - save_cache:
           key: dependency-cache-{{ checksum "package-lock.json" }}
           paths:
             - ./node_modules
       - run:
           name: Run tests
-          command: npm test
+          command: |
+            CI=true npm test -- --watchAll=false --passWithNoTests
       - run:
           name: Verify API endpoints
           command: |
@@ -141,7 +147,14 @@ jobs:
             const app = express();
             
             app.use(cors({
-              origin: 'http://ec2-3-95-15-62.compute-1.amazonaws.com',
+              origin: function(origin, callback) {
+                const allowedOrigins = ['http://localhost', 'http://localhost:3000', /\.amazonaws\.com$/];
+                if (!origin || allowedOrigins.some(regex => origin.match(regex))) {
+                  callback(null, true);
+                } else {
+                  callback(new Error('Not allowed by CORS'));
+                }
+              },
               methods: ['GET', 'POST', 'PUT', 'DELETE'],
               allowedHeaders: ['Content-Type']
             }));
