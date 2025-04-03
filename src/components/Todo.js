@@ -1,18 +1,14 @@
-function Todo(props) {
-
-        if (props.todo.isInEditingMode) {
-            return(
-                <span>
-                    <input value={props.updateText} onChange={props.handleUpdateText} />
-                </span>
-            );
-        } else {
-            return (
-            <span>
-                {props.todo.text}
-            </span>
-            );
-        }
+function Todo({ todo, updateText, handleUpdateText }) {
+    return todo.isInEditingMode ? (
+        <input 
+            value={updateText} 
+            onChange={handleUpdateText} 
+        />
+    ) : (
+        <span>
+            {todo.text}
+        </span>
+    );
 }
 
 export default Todo;
