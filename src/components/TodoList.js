@@ -8,7 +8,6 @@ function TodoList() {
     const [text, setText] = useState("");
     const [updateText, setUpdateText] = useState("");
 
-    // Load todos from server on component mount
     useEffect(() => {
         async function fetchTodos() {
             try {
@@ -24,23 +23,15 @@ function TodoList() {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        const newTodo = {
-            text: text,
-            completed: false
-        };
-
+        if (!text.trim()) return;
+        
         try {
-            // Save to server
             const response = await fetch(API_BASE, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newTodo)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, completed: false })
             });
             const addedTodo = await response.json();
-
-            // Update local state with the todo returned from server (includes ID)
             setTodos([...todos, addedTodo]);
             setText("");
         } catch (error) {
@@ -51,12 +42,7 @@ function TodoList() {
     async function handleDelete(e, id) {
         e.preventDefault();
         try {
-            // Delete from server
-            await fetch(`${API_BASE}/${id}`, {
-                method: 'DELETE'
-            });
-
-            // Update local state
+            await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
             setTodos(todos.filter(todo => todo.id !== id));
         } catch (error) {
             console.error("Failed to delete todo:", error);
@@ -76,25 +62,21 @@ function TodoList() {
 
     async function handleUpdate(e, id) {
         e.preventDefault();
-        const updatedTodo = {
-            text: updateText,
-            isInEditingMode: false
-        };
-
+        if (!updateText.trim()) return;
+        
         try {
-            // Update on server
             const response = await fetch(`${API_BASE}/${id}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updatedTodo)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    text: updateText,
+                    completed: todos.find(t => t.id === id).completed 
+                })
             });
-            const updatedTodoFromServer = await response.json();
-
-            // Update local state
+            const updatedTodo = await response.json();
+            
             setTodos(todos.map(todo => 
-                todo.id === id ? { ...todo, ...updatedTodoFromServer } : todo
+                todo.id === id ? { ...updatedTodo, isInEditingMode: false } : todo
             ));
             setUpdateText("");
         } catch (error) {
@@ -107,45 +89,35 @@ function TodoList() {
         try {
             const response = await fetch(`${API_BASE}/${id}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    completed: !todo.completed,
-                    text: todo.text
+                    text: todo.text,
+                    completed: !todo.completed
                 })
             });
             const updatedTodo = await response.json();
-            
-            setTodos(todos.map(t => 
-                t.id === id ? updatedTodo : t
-            ));
+            setTodos(todos.map(t => t.id === id ? updatedTodo : t));
         } catch (error) {
             console.error("Failed to toggle todo:", error);
         }
     }
 
-    function handleInput(e) {
-        setText(e.target.value);
-    }
-
-    function handleUpdateText(e) {
-        setUpdateText(e.target.value);
-    }
-
     return (
         <div>
-            <input value={text} onChange={handleInput} />
+            <input 
+                value={text} 
+                onChange={(e) => setText(e.target.value)} 
+                placeholder="Add new todo"
+            />
             <button onClick={handleSubmit}>Add ToDo</button>
             <ul>
                 {todos.map((todo) => (
                     <li key={todo.id}>
                         {todo.isInEditingMode ? (
                             <>
-                                <Todo 
-                                    todo={todo} 
-                                    handleUpdateText={handleUpdateText} 
-                                    updateText={updateText} 
+                                <input
+                                    value={updateText}
+                                    onChange={(e) => setUpdateText(e.target.value)}
                                 />
                                 <button onClick={(e) => handleUpdate(e, todo.id)}>
                                     Done
@@ -158,12 +130,17 @@ function TodoList() {
                                     checked={todo.completed || false}
                                     onChange={() => handleToggleComplete(todo.id)}
                                 />
-                                <Todo todo={todo} />
+                                <span style={{ 
+                                    textDecoration: todo.completed ? 'line-through' : 'none',
+                                    margin: '0 10px'
+                                }}>
+                                    {todo.text}
+                                </span>
                                 <button onClick={(e) => handleDelete(e, todo.id)}>
                                     Delete
                                 </button>
                                 <button onClick={(e) => handleEdit(e, todo.id)}>
-                                    Update Todo
+                                    Edit
                                 </button>
                             </>
                         )}
