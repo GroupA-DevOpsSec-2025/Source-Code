@@ -19,6 +19,7 @@ jobs:
       - image: cimg/node:20.14.0
     steps:
       - checkout
+      - setup_remote_docker
       - restore_cache:
           key: dependency-cache-{{ checksum "package-lock.json" }}
       - run:
@@ -37,6 +38,15 @@ jobs:
           name: Run tests
           command: |
             CI=true npm test -- --watchAll=false --passWithNoTests
+      - run:
+          name: docker-login
+          command: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      - run:
+          name: Build Docker Image
+          command: docker build -t $IMAGE_NAME:latest . 
+      - run: 
+          name: Publish Docker Image
+          command: docker push $IMAGE_NAME      
       - run:
           name: Verify API endpoints
           command: |
