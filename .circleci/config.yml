@@ -68,7 +68,7 @@ jobs:
             # Application deployment
             echo 'rm -rf Source-Code' >> deploy.sh
             echo 'git clone https://github.com/GroupA-DevOpsSec-2025/Source-Code.git' >> deploy.sh
-            echo 'cd Source-Code' >> deploy.sh
+            echo 'cd Source-Code' >> deploy.sh  # Enter directory once after clone
             echo 'npm install' >> deploy.sh
             echo 'npm run build' >> deploy.sh
             echo 'sudo rm -rf /var/www/html/*' >> deploy.sh
@@ -117,8 +117,7 @@ jobs:
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
             echo 'sudo rm -f /etc/nginx/sites-enabled/default' >> deploy.sh
             
-            # Start server application - Updated for bin/www in root
-            echo 'cd Source-Code' >> deploy.sh
+            # Start server application - Removed redundant cd Source-Code
             echo 'chmod +x bin/www' >> deploy.sh  # Ensure executable permissions
             echo 'npm install' >> deploy.sh
             echo 'pm2 delete todo-api 2>/dev/null || true' >> deploy.sh
