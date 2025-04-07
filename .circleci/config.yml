@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            # Create deploy.sh using properly escaped syntax
+            # Create deploy.sh with proper certificate handling
             echo '#!/usr/bin/env bash' > deploy.sh
             echo 'set -e' >> deploy.sh
             
@@ -68,65 +68,82 @@ jobs:
             # Application deployment
             echo 'rm -rf Source-Code' >> deploy.sh
             echo 'git clone https://github.com/GroupA-DevOpsSec-2025/Source-Code.git' >> deploy.sh
-            echo 'cd Source-Code' >> deploy.sh  # Enter directory once after clone
+            echo 'cd Source-Code' >> deploy.sh
             echo 'npm install' >> deploy.sh
             echo 'npm run build' >> deploy.sh
             echo 'sudo rm -rf /var/www/html/*' >> deploy.sh
             echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
             echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
             
-            # SSL Certificate Setup
+            # SSL Certificate Setup with proper newlines
             echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
-            echo 'echo "-----BEGIN PRIVATE KEY-----" | sudo tee /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
-            echo 'echo "$PRIVATE_KEY" | sudo tee -a /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
-            echo 'echo "-----END PRIVATE KEY-----" | sudo tee -a /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
-            echo 'echo "-----BEGIN CERTIFICATE-----" | sudo tee /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
-            echo 'echo "$SERVER_CERT" | sudo tee -a /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
-            echo 'echo "-----END CERTIFICATE-----" | sudo tee -a /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
+            echo 'sudo tee /etc/ssl/private/privatekey.pem >/dev/null <<EOF' >> deploy.sh
+            echo '-----BEGIN PRIVATE KEY-----' >> deploy.sh
+            echo '$PRIVATE_KEY' >> deploy.sh
+            echo '-----END PRIVATE KEY-----' >> deploy.sh
+            echo 'EOF' >> deploy.sh
+            echo 'sudo tee /etc/ssl/certs/server.crt >/dev/null <<EOF' >> deploy.sh
+            echo '-----BEGIN CERTIFICATE-----' >> deploy.sh
+            echo '$SERVER_CERT' >> deploy.sh
+            echo '-----END CERTIFICATE-----' >> deploy.sh
+            echo 'EOF' >> deploy.sh
             echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
             echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
             
+            # Verify certificates
+            echo 'echo "Verifying SSL certificate..."' >> deploy.sh
+            echo 'if ! sudo openssl x509 -in /etc/ssl/certs/server.crt -noout 2>/dev/null; then' >> deploy.sh
+            echo '  echo "ERROR: Invalid SSL certificate format"' >> deploy.sh
+            echo '  exit 1' >> deploy.sh
+            echo 'fi' >> deploy.sh
+            
             # Nginx Configuration
-            echo 'echo "server {" | sudo tee /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  listen 80;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  server_name $EC2_PUBLIC_DNS;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  return 301 https://\$host\$request_uri;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "}" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "server {" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  listen 443 ssl;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  server_name $EC2_PUBLIC_DNS;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  ssl_certificate /etc/ssl/certs/server.crt;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  ssl_certificate_key /etc/ssl/private/privatekey.pem;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  root /var/www/html;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  location / {" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    try_files \$uri /index.html;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  }" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  location /api {" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_pass http://localhost:3001;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_http_version 1.1;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_set_header Upgrade \$http_upgrade;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_set_header Connection \"upgrade\";" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_set_header Host \$host;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_set_header X-Real-IP \$remote_addr;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "  }" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
-            echo 'echo "}" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
+            echo 'sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<EOF' >> deploy.sh
+            echo 'server {' >> deploy.sh
+            echo '  listen 80;' >> deploy.sh
+            echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
+            echo '  return 301 https://\$host\$request_uri;' >> deploy.sh
+            echo '}' >> deploy.sh
+            echo '' >> deploy.sh
+            echo 'server {' >> deploy.sh
+            echo '  listen 443 ssl;' >> deploy.sh
+            echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
+            echo '  ssl_certificate /etc/ssl/certs/server.crt;' >> deploy.sh
+            echo '  ssl_certificate_key /etc/ssl/private/privatekey.pem;' >> deploy.sh
+            echo '  root /var/www/html;' >> deploy.sh
+            echo '  location / {' >> deploy.sh
+            echo '    try_files \$uri /index.html;' >> deploy.sh
+            echo '  }' >> deploy.sh
+            echo '  location /api {' >> deploy.sh
+            echo '    proxy_pass http://localhost:3001;' >> deploy.sh
+            echo '    proxy_http_version 1.1;' >> deploy.sh
+            echo '    proxy_set_header Upgrade \$http_upgrade;' >> deploy.sh
+            echo '    proxy_set_header Connection "upgrade";' >> deploy.sh
+            echo '    proxy_set_header Host \$host;' >> deploy.sh
+            echo '    proxy_set_header X-Real-IP \$remote_addr;' >> deploy.sh
+            echo '    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;' >> deploy.sh
+            echo '  }' >> deploy.sh
+            echo '}' >> deploy.sh
+            echo 'EOF' >> deploy.sh
             
             # Finalize setup
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
             echo 'sudo rm -f /etc/nginx/sites-enabled/default' >> deploy.sh
             
-            # Start server application - Removed redundant cd Source-Code
-            echo 'chmod +x bin/www' >> deploy.sh  # Ensure executable permissions
-            echo 'npm install' >> deploy.sh
+            # Start server application
+            echo 'chmod +x bin/www' >> deploy.sh
             echo 'pm2 delete todo-api 2>/dev/null || true' >> deploy.sh
             echo 'pm2 start ./bin/www --name todo-api' >> deploy.sh
             echo 'pm2 save' >> deploy.sh
             echo 'pm2 startup || true' >> deploy.sh
             
-            # Restart Nginx
-            echo 'sudo nginx -t && sudo systemctl restart nginx' >> deploy.sh
+            # Restart Nginx with validation
+            echo 'if sudo nginx -t; then' >> deploy.sh
+            echo '  sudo systemctl restart nginx' >> deploy.sh
+            echo 'else' >> deploy.sh
+            echo '  echo "Nginx configuration test failed"' >> deploy.sh
+            echo '  exit 1' >> deploy.sh
+            echo 'fi' >> deploy.sh
             
             chmod +x deploy.sh
       - run:
@@ -136,6 +153,6 @@ jobs:
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               $EC2_USERNAME@$EC2_PUBLIC_DNS \
               "export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; \
-               export PRIVATE_KEY='$PRIVATE_KEY'; \
-               export SERVER_CERT='$SERVER_CERT'; \
+               export PRIVATE_KEY='$(echo "$PRIVATE_KEY" | sed ':a;N;$!ba;s/\n/\\n/g')'; \
+               export SERVER_CERT='$(echo "$SERVER_CERT" | sed ':a;N;$!ba;s/\n/\\n/g')'; \
                bash ~/deploy.sh"
