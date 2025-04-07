@@ -1,55 +1,4 @@
-version: 2.1
-
-workflows:
-  version: 2
-  build-deploy:
-    jobs:
-      - build
-      - deploy:
-          requires:
-            - build
-          filters:
-            branches:
-              only: main
-
-jobs:
-  build:
-    working_directory: ~/Source-Code
-    docker:
-      - image: cimg/node:20.14.0
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
-      - run:
-          name: Install dependencies
-          command: npm install
-      - run:
-          name: Run tests
-          command: |
-            CI=true npm test -- --watchAll=false --passWithNoTests
-      - save_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
-          paths:
-            - ./node_modules
-      - persist_to_workspace:
-          root: .
-          paths: .
-
-  deploy:
-    working_directory: ~/Source-Code
-    docker:
-      - image: cimg/node:20.14.0
-    steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Setup SSH
-          command: |
-            mkdir -p ~/.ssh
-            echo "$SSH_PRIVATE_KEY" > ~/.ssh/ec2_key
-            chmod 600 ~/.ssh/ec2_key
-            ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
+# In the deploy job, modify the 'Create deployment script' step:
       - run:
           name: Create deployment script
           command: |
@@ -71,18 +20,31 @@ jobs:
             echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
             echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
             
-            # Add Nginx config with HTTPS support
+            # Create SSL directories and certificates directly in deploy.sh
+            echo '# Create SSL directories' >> deploy.sh
+            echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
+            echo '# Write private key' >> deploy.sh
+            echo 'echo "-----BEGIN PRIVATE KEY-----" | sudo tee /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
+            echo 'echo "$PRIVATE_KEY" | sudo tee -a /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
+            echo 'echo "-----END PRIVATE KEY-----" | sudo tee -a /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
+            echo '# Write server certificate' >> deploy.sh
+            echo 'echo "-----BEGIN CERTIFICATE-----" | sudo tee /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
+            echo 'echo "$SERVER_CERT" | sudo tee -a /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
+            echo 'echo "-----END CERTIFICATE-----" | sudo tee -a /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
+            echo '# Set proper permissions' >> deploy.sh
+            echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
+            echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
+            
+            # Add Nginx config
             echo "echo 'server {" > nginx-config.sh
             echo "  listen 80;" >> nginx-config.sh
             echo "  server_name \$EC2_PUBLIC_DNS;" >> nginx-config.sh
-            echo "  # Redirect all HTTP requests to HTTPS" >> nginx-config.sh
             echo "  return 301 https://\$host\$request_uri;" >> nginx-config.sh
             echo "}" >> nginx-config.sh
             echo "" >> nginx-config.sh
             echo "server {" >> nginx-config.sh
             echo "  listen 443 ssl;" >> nginx-config.sh
             echo "  server_name \$EC2_PUBLIC_DNS;" >> nginx-config.sh
-            echo "  # SSL certificate configuration" >> nginx-config.sh
             echo "  ssl_certificate /etc/ssl/certs/server.crt;" >> nginx-config.sh
             echo "  ssl_certificate_key /etc/ssl/private/privatekey.pem;" >> nginx-config.sh
             echo "" >> nginx-config.sh
@@ -90,7 +52,6 @@ jobs:
             echo "  location / {" >> nginx-config.sh
             echo "    try_files \$uri /index.html;" >> nginx-config.sh
             echo "  }" >> nginx-config.sh
-            echo "  # API proxy configuration" >> nginx-config.sh
             echo "  location /api {" >> nginx-config.sh
             echo "    proxy_pass http://localhost:3001;" >> nginx-config.sh
             echo "    proxy_http_version 1.1;" >> nginx-config.sh
@@ -102,23 +63,7 @@ jobs:
             echo "  }" >> nginx-config.sh
             echo "}' | sudo tee /etc/nginx/sites-available/todo-app >/dev/null" >> nginx-config.sh
             
-            # Add SSL certificate setup script
-            echo 'echo "-----BEGIN PRIVATE KEY-----"' > ssl-setup.sh
-            echo 'echo "$PRIVATE_KEY"' >> ssl-setup.sh
-            echo 'echo "-----END PRIVATE KEY-----"' >> ssl-setup.sh
-            echo 'echo "-----BEGIN CERTIFICATE-----"' >> ssl-setup.sh
-            echo 'echo "$SERVER_CERT"' >> ssl-setup.sh
-            echo 'echo "-----END CERTIFICATE-----"' >> ssl-setup.sh
-            
-            echo '# Create SSL directories and install certificates' >> deploy.sh
-            echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
-            echo 'chmod +x ssl-setup.sh' >> deploy.sh
-            echo '# Install private key' >> deploy.sh
-            echo './ssl-setup.sh | sudo tee /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
-            echo '# Install server certificate' >> deploy.sh
-            echo './ssl-setup.sh | sudo tee /etc/ssl/certs/server.crt >/dev/null' >> deploy.sh
-            
-            echo '# Finalize Nginx configuration' >> deploy.sh
+            echo '# Configure Nginx' >> deploy.sh
             echo 'chmod +x nginx-config.sh' >> deploy.sh
             echo './nginx-config.sh' >> deploy.sh
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
@@ -134,11 +79,3 @@ jobs:
             echo 'sudo nginx -t && sudo systemctl restart nginx' >> deploy.sh
             
             chmod +x deploy.sh
-      - run:
-          name: Deploy application
-          command: |
-            scp -i ~/.ssh/ec2_key deploy.sh $EC2_USERNAME@$EC2_PUBLIC_DNS:~
-            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS \
-              "export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; export PRIVATE_KEY='$PRIVATE_KEY'; export SERVER_CERT='$SERVER_CERT'; bash ~/deploy.sh"
-              
