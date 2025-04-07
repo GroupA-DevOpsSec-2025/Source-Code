@@ -71,8 +71,7 @@ jobs:
       - run:
           name: Prepare deployment script
           command: |
-            # Create the deployment script with proper escaping
-            cat << 'EOF' > deploy.sh
+            cat << 'HEREDOC' > deploy.sh
             #!/usr/bin/env bash
             set -e
             
@@ -108,7 +107,7 @@ jobs:
             sudo chmod -R 755 /var/www/html
             
             # Configure Nginx
-            sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<'NGINX_EOF'
+            sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<'NGINX_CONFIG'
             server {
               listen 80;
               server_name _;
@@ -132,7 +131,7 @@ jobs:
                 proxy_read_timeout 300s;
               }
             }
-            NGINX_EOF
+            NGINX_CONFIG
             
             sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
             sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -151,17 +150,13 @@ jobs:
             echo "Deployment successful!"
             echo "Frontend: http://\$EC2_PUBLIC_DNS"
             echo "API: http://\$EC2_PUBLIC_DNS/api/todos"
-            EOF
+            HEREDOC
             
-            # Make script executable
             chmod +x deploy.sh
       - run:
           name: Transfer and execute deployment
           command: |
-            # Transfer files
             scp -i ~/.ssh/ec2_key deploy.sh $EC2_USERNAME@$EC2_PUBLIC_DNS:~/deploy.sh
-            
-            # Execute deployment
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               $EC2_USERNAME@$EC2_PUBLIC_DNS \
               "export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; bash ~/deploy.sh"
