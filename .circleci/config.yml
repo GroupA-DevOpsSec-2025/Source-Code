@@ -61,10 +61,16 @@ jobs:
       - run:
           name: Trigger deployment
           command: |
+            # First ensure git is installed on the remote server
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               $EC2_USERNAME@$EC2_PUBLIC_DNS \
-              "export REPO_URL=$(git config --get remote.origin.url); \
-               export BRANCH=main; \
-               export EC2_PUBLIC_DNS=$EC2_PUBLIC_DNS; \
-               export EC2_USERNAME=$EC2_USERNAME; \
+              "sudo apt-get update && sudo apt-get install -y git"
+            
+            # Then run the deployment script with proper environment variables
+            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              $EC2_USERNAME@$EC2_PUBLIC_DNS \
+              "export REPO_URL='$(git remote get-url origin)'; \
+               export BRANCH='main'; \
+               export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; \
+               export EC2_USERNAME='$EC2_USERNAME'; \
                bash -s" < deploy.sh
