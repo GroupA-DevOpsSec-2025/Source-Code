@@ -60,3 +60,4 @@ jobs:
                rm -rf Source-Code/; \
                git clone https://github.com/GroupA-DevOpsSec-2025/Source-Code.git; \
                bash Source-Code/deploy.sh"
+               
