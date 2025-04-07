@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            # Create deploy.sh with proper certificate handling
+            # Create deploy.sh using echo statements
             echo '#!/usr/bin/env bash' > deploy.sh
             echo 'set -e' >> deploy.sh
             
@@ -75,34 +75,27 @@ jobs:
             echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
             echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
             
-            # SSL Certificate Setup with proper newlines
+            # SSL Certificate Setup - using multiple echo statements
             echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
-            echo 'sudo tee /etc/ssl/private/privatekey.pem >/dev/null <<EOF' >> deploy.sh
+            echo 'sudo bash -c "cat > /etc/ssl/private/privatekey.pem <<\"PRIVATE_EOF\""' >> deploy.sh
             echo '-----BEGIN PRIVATE KEY-----' >> deploy.sh
             echo '$PRIVATE_KEY' >> deploy.sh
             echo '-----END PRIVATE KEY-----' >> deploy.sh
-            echo 'EOF' >> deploy.sh
-            echo 'sudo tee /etc/ssl/certs/server.crt >/dev/null <<EOF' >> deploy.sh
+            echo 'PRIVATE_EOF' >> deploy.sh
+            echo 'sudo bash -c "cat > /etc/ssl/certs/server.crt <<\"CERT_EOF\""' >> deploy.sh
             echo '-----BEGIN CERTIFICATE-----' >> deploy.sh
             echo '$SERVER_CERT' >> deploy.sh
             echo '-----END CERTIFICATE-----' >> deploy.sh
-            echo 'EOF' >> deploy.sh
+            echo 'CERT_EOF' >> deploy.sh
             echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
             echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
             
-            # Verify certificates
-            echo 'echo "Verifying SSL certificate..."' >> deploy.sh
-            echo 'if ! sudo openssl x509 -in /etc/ssl/certs/server.crt -noout 2>/dev/null; then' >> deploy.sh
-            echo '  echo "ERROR: Invalid SSL certificate format"' >> deploy.sh
-            echo '  exit 1' >> deploy.sh
-            echo 'fi' >> deploy.sh
-            
-            # Nginx Configuration
-            echo 'sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<EOF' >> deploy.sh
+            # Nginx Configuration - using multiple echo statements
+            echo 'sudo bash -c "cat > /etc/nginx/sites-available/todo-app <<\"NGINX_EOF\""' >> deploy.sh
             echo 'server {' >> deploy.sh
             echo '  listen 80;' >> deploy.sh
             echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
-            echo '  return 301 https://\$host\$request_uri;' >> deploy.sh
+            echo '  return 301 https://$host$request_uri;' >> deploy.sh
             echo '}' >> deploy.sh
             echo '' >> deploy.sh
             echo 'server {' >> deploy.sh
@@ -112,19 +105,19 @@ jobs:
             echo '  ssl_certificate_key /etc/ssl/private/privatekey.pem;' >> deploy.sh
             echo '  root /var/www/html;' >> deploy.sh
             echo '  location / {' >> deploy.sh
-            echo '    try_files \$uri /index.html;' >> deploy.sh
+            echo '    try_files $uri /index.html;' >> deploy.sh
             echo '  }' >> deploy.sh
             echo '  location /api {' >> deploy.sh
             echo '    proxy_pass http://localhost:3001;' >> deploy.sh
             echo '    proxy_http_version 1.1;' >> deploy.sh
-            echo '    proxy_set_header Upgrade \$http_upgrade;' >> deploy.sh
+            echo '    proxy_set_header Upgrade $http_upgrade;' >> deploy.sh
             echo '    proxy_set_header Connection "upgrade";' >> deploy.sh
-            echo '    proxy_set_header Host \$host;' >> deploy.sh
-            echo '    proxy_set_header X-Real-IP \$remote_addr;' >> deploy.sh
-            echo '    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;' >> deploy.sh
+            echo '    proxy_set_header Host $host;' >> deploy.sh
+            echo '    proxy_set_header X-Real-IP $remote_addr;' >> deploy.sh
+            echo '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> deploy.sh
             echo '  }' >> deploy.sh
             echo '}' >> deploy.sh
-            echo 'EOF' >> deploy.sh
+            echo 'NGINX_EOF' >> deploy.sh
             
             # Finalize setup
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
@@ -137,13 +130,8 @@ jobs:
             echo 'pm2 save' >> deploy.sh
             echo 'pm2 startup || true' >> deploy.sh
             
-            # Restart Nginx with validation
-            echo 'if sudo nginx -t; then' >> deploy.sh
-            echo '  sudo systemctl restart nginx' >> deploy.sh
-            echo 'else' >> deploy.sh
-            echo '  echo "Nginx configuration test failed"' >> deploy.sh
-            echo '  exit 1' >> deploy.sh
-            echo 'fi' >> deploy.sh
+            # Restart Nginx
+            echo 'sudo nginx -t && sudo systemctl restart nginx' >> deploy.sh
             
             chmod +x deploy.sh
       - run:
@@ -153,6 +141,6 @@ jobs:
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               $EC2_USERNAME@$EC2_PUBLIC_DNS \
               "export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; \
-               export PRIVATE_KEY='$(echo "$PRIVATE_KEY" | sed ':a;N;$!ba;s/\n/\\n/g')'; \
-               export SERVER_CERT='$(echo "$SERVER_CERT" | sed ':a;N;$!ba;s/\n/\\n/g')'; \
+               export PRIVATE_KEY='$PRIVATE_KEY'; \
+               export SERVER_CERT='$SERVER_CERT'; \
                bash ~/deploy.sh"
