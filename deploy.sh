@@ -19,19 +19,26 @@ if ! command -v node &>/dev/null; then
   sudo npm install -g npm@latest pm2
 fi
 
+# Set deployment directory
+DEPLOY_DIR="$HOME/Source-Code"
+echo "Deploying to: $DEPLOY_DIR"
+
 # Clone or update repository
-echo "Setting up repository..."
-if [ -d "Source-Code" ]; then
+if [ -d "$DEPLOY_DIR" ]; then
   echo "Updating existing repository..."
-  cd Source-Code
+  cd "$DEPLOY_DIR"
   git fetch origin
-  git checkout $BRANCH
+  git checkout -f $BRANCH
   git reset --hard origin/$BRANCH
 else
   echo "Cloning new repository..."
-  git clone -b $BRANCH $REPO_URL Source-Code
-  cd Source-Code
+  git clone -b $BRANCH $REPO_URL "$DEPLOY_DIR"
+  cd "$DEPLOY_DIR"
 fi
+
+# Verify repository contents
+echo "Repository contents:"
+ls -la
 
 # Install project dependencies
 echo "Installing Node.js dependencies..."
@@ -41,14 +48,14 @@ npm install
 echo "Building frontend..."
 npm run build
 
-# Deploy frontend
+# Frontend deployment
 echo "Deploying frontend to /var/www/html..."
 sudo rm -rf /var/www/html/*
 sudo cp -a build/* /var/www/html/
 sudo chown -R www-data:www-data /var/www/html
 sudo chmod -R 755 /var/www/html
 
-# Configure Nginx
+# Nginx configuration
 echo "Configuring Nginx..."
 sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<'EOF'
 server {
@@ -85,7 +92,7 @@ echo "Setting up backend..."
 cd server
 npm install
 
-# Manage PM2 process
+# PM2 process management
 echo "Starting backend with PM2..."
 pm2 delete todo-api 2>/dev/null || true
 pm2 start ./bin/www --name todo-api --wait-ready
