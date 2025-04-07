@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            # Create deploy.sh using simple echo statements
+            # Create deploy.sh using properly escaped syntax
             echo '#!/usr/bin/env bash' > deploy.sh
             echo 'set -e' >> deploy.sh
             
@@ -75,7 +75,7 @@ jobs:
             echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
             echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
             
-            # SSL Certificate Setup - using multiple echo statements
+            # SSL Certificate Setup
             echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
             echo 'echo "-----BEGIN PRIVATE KEY-----" | sudo tee /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
             echo 'echo "$PRIVATE_KEY" | sudo tee -a /etc/ssl/private/privatekey.pem >/dev/null' >> deploy.sh
@@ -86,7 +86,7 @@ jobs:
             echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
             echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
             
-            # Nginx Configuration - using multiple echo statements
+            # Nginx Configuration
             echo 'echo "server {" | sudo tee /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
             echo 'echo "  listen 80;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
             echo 'echo "  server_name $EC2_PUBLIC_DNS;" | sudo tee -a /etc/nginx/sites-available/todo-app >/dev/null' >> deploy.sh
@@ -116,12 +116,17 @@ jobs:
             # Finalize setup
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
             echo 'sudo rm -f /etc/nginx/sites-enabled/default' >> deploy.sh
-            echo 'cd server' >> deploy.sh
+            
+            # Start server application - Updated for bin/www in root
+            echo 'cd Source-Code' >> deploy.sh
+            echo 'chmod +x bin/www' >> deploy.sh  # Ensure executable permissions
             echo 'npm install' >> deploy.sh
             echo 'pm2 delete todo-api 2>/dev/null || true' >> deploy.sh
             echo 'pm2 start ./bin/www --name todo-api' >> deploy.sh
             echo 'pm2 save' >> deploy.sh
             echo 'pm2 startup || true' >> deploy.sh
+            
+            # Restart Nginx
             echo 'sudo nginx -t && sudo systemctl restart nginx' >> deploy.sh
             
             chmod +x deploy.sh
