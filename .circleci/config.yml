@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            cat > deploy.sh << 'EOS'
+            cat << 'EOS' > deploy.sh
             #!/usr/bin/env bash
             set -e
             
@@ -79,13 +79,13 @@ jobs:
             
             # Setup SSL certificates
             sudo mkdir -p /etc/ssl/private /etc/ssl/certs
-            cat > /etc/ssl/private/privatekey.pem << 'CERT'
+            cat << 'CERT' > /etc/ssl/private/privatekey.pem
             -----BEGIN PRIVATE KEY-----
             ${PRIVATE_KEY}
             -----END PRIVATE KEY-----
             CERT
             
-            cat > /etc/ssl/certs/server.crt << 'CERT'
+            cat << 'CERT' > /etc/ssl/certs/server.crt
             -----BEGIN CERTIFICATE-----
             ${SERVER_CERT}
             -----END CERTIFICATE-----
@@ -96,7 +96,7 @@ jobs:
             sudo chmod 644 /etc/ssl/certs/server.crt
             
             # Configure Nginx
-            cat > /etc/nginx/sites-available/todo-app << 'NGINX'
+            cat << 'NGINX' > /etc/nginx/sites-available/todo-app
             server {
               listen 80;
               server_name ${EC2_PUBLIC_DNS};
