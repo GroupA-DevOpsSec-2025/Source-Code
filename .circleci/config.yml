@@ -53,94 +53,93 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            cat << 'EOS' > deploy.sh
-            #!/usr/bin/env bash
-            set -e
-            
-            # Update system and install dependencies
-            sudo apt-get update
-            if ! command -v node &>/dev/null; then
-              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get install -y nodejs nginx
-              sudo npm install -g npm@latest pm2
-            fi
-            
-            # Clone and build application
-            rm -rf Source-Code
-            git clone https://github.com/GroupA-DevOpsSec-2025/Source-Code.git
-            cd Source-Code
-            npm install
-            npm run build
-            
-            # Deploy frontend files
-            sudo rm -rf /var/www/html/*
-            sudo cp -a build/* /var/www/html/
-            sudo chown -R www-data:www-data /var/www/html
-            
-            # Setup SSL certificates
-            sudo mkdir -p /etc/ssl/private /etc/ssl/certs
-            cat << 'CERT' > /etc/ssl/private/privatekey.pem
-            -----BEGIN PRIVATE KEY-----
-            ${PRIVATE_KEY}
-            -----END PRIVATE KEY-----
-            CERT
-            
-            cat << 'CERT' > /etc/ssl/certs/server.crt
-            -----BEGIN CERTIFICATE-----
-            ${SERVER_CERT}
-            -----END CERTIFICATE-----
-            CERT
-            
-            # Set proper permissions
-            sudo chmod 600 /etc/ssl/private/privatekey.pem
-            sudo chmod 644 /etc/ssl/certs/server.crt
-            
-            # Configure Nginx
-            cat << 'NGINX' > /etc/nginx/sites-available/todo-app
-            server {
-              listen 80;
-              server_name ${EC2_PUBLIC_DNS};
-              return 301 https://\$host\$request_uri;
-            }
-            
-            server {
-              listen 443 ssl;
-              server_name ${EC2_PUBLIC_DNS};
-              
-              ssl_certificate /etc/ssl/certs/server.crt;
-              ssl_certificate_key /etc/ssl/private/privatekey.pem;
-              
-              root /var/www/html;
-              location / {
-                try_files \$uri /index.html;
-              }
-              location /api {
-                proxy_pass http://localhost:3001;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade \$http_upgrade;
-                proxy_set_header Connection "upgrade";
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-              }
-            }
-            NGINX
-            
-            # Enable Nginx configuration
-            sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
-            sudo rm -f /etc/nginx/sites-enabled/default
-            
-            # Start server application
-            cd server
-            npm install
-            pm2 delete todo-api 2>/dev/null || true
-            pm2 start ./bin/www --name todo-api
-            pm2 save
-            pm2 startup || true
-            
-            # Restart Nginx
-            sudo nginx -t && sudo systemctl restart nginx
-            EOS
+            # Create deploy.sh using echo statements
+            echo '#!/usr/bin/env bash' > deploy.sh
+            echo 'set -e' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Update system and install dependencies' >> deploy.sh
+            echo 'sudo apt-get update' >> deploy.sh
+            echo 'if ! command -v node &>/dev/null; then' >> deploy.sh
+            echo '  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -' >> deploy.sh
+            echo '  sudo apt-get install -y nodejs nginx' >> deploy.sh
+            echo '  sudo npm install -g npm@latest pm2' >> deploy.sh
+            echo 'fi' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Clone and build application' >> deploy.sh
+            echo 'rm -rf Source-Code' >> deploy.sh
+            echo 'git clone https://github.com/GroupA-DevOpsSec-2025/Source-Code.git' >> deploy.sh
+            echo 'cd Source-Code' >> deploy.sh
+            echo 'npm install' >> deploy.sh
+            echo 'npm run build' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Deploy frontend files' >> deploy.sh
+            echo 'sudo rm -rf /var/www/html/*' >> deploy.sh
+            echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
+            echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Setup SSL certificates' >> deploy.sh
+            echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
+            echo 'cat > /etc/ssl/private/privatekey.pem <<EOF' >> deploy.sh
+            echo '-----BEGIN PRIVATE KEY-----' >> deploy.sh
+            echo '$PRIVATE_KEY' >> deploy.sh
+            echo '-----END PRIVATE KEY-----' >> deploy.sh
+            echo 'EOF' >> deploy.sh
+            echo '' >> deploy.sh
+            echo 'cat > /etc/ssl/certs/server.crt <<EOF' >> deploy.sh
+            echo '-----BEGIN CERTIFICATE-----' >> deploy.sh
+            echo '$SERVER_CERT' >> deploy.sh
+            echo '-----END CERTIFICATE-----' >> deploy.sh
+            echo 'EOF' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Set proper permissions' >> deploy.sh
+            echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
+            echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Configure Nginx' >> deploy.sh
+            echo 'cat > /etc/nginx/sites-available/todo-app <<EOF' >> deploy.sh
+            echo 'server {' >> deploy.sh
+            echo '  listen 80;' >> deploy.sh
+            echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
+            echo '  return 301 https://$host$request_uri;' >> deploy.sh
+            echo '}' >> deploy.sh
+            echo '' >> deploy.sh
+            echo 'server {' >> deploy.sh
+            echo '  listen 443 ssl;' >> deploy.sh
+            echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '  ssl_certificate /etc/ssl/certs/server.crt;' >> deploy.sh
+            echo '  ssl_certificate_key /etc/ssl/private/privatekey.pem;' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '  root /var/www/html;' >> deploy.sh
+            echo '  location / {' >> deploy.sh
+            echo '    try_files $uri /index.html;' >> deploy.sh
+            echo '  }' >> deploy.sh
+            echo '  location /api {' >> deploy.sh
+            echo '    proxy_pass http://localhost:3001;' >> deploy.sh
+            echo '    proxy_http_version 1.1;' >> deploy.sh
+            echo '    proxy_set_header Upgrade $http_upgrade;' >> deploy.sh
+            echo '    proxy_set_header Connection "upgrade";' >> deploy.sh
+            echo '    proxy_set_header Host $host;' >> deploy.sh
+            echo '    proxy_set_header X-Real-IP $remote_addr;' >> deploy.sh
+            echo '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> deploy.sh
+            echo '  }' >> deploy.sh
+            echo '}' >> deploy.sh
+            echo 'EOF' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Enable Nginx configuration' >> deploy.sh
+            echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
+            echo 'sudo rm -f /etc/nginx/sites-enabled/default' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Start server application' >> deploy.sh
+            echo 'cd server' >> deploy.sh
+            echo 'npm install' >> deploy.sh
+            echo 'pm2 delete todo-api 2>/dev/null || true' >> deploy.sh
+            echo 'pm2 start ./bin/www --name todo-api' >> deploy.sh
+            echo 'pm2 save' >> deploy.sh
+            echo 'pm2 startup || true' >> deploy.sh
+            echo '' >> deploy.sh
+            echo '# Restart Nginx' >> deploy.sh
+            echo 'sudo nginx -t && sudo systemctl restart nginx' >> deploy.sh
             
             chmod +x deploy.sh
       - run:
