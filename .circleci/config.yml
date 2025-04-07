@@ -69,18 +69,99 @@ jobs:
             chmod 600 ~/.ssh/ec2_key
             ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
       - run:
-          name: Trigger deployment
+          name: Prepare deployment script
           command: |
-            # First ensure git is installed on the remote server
-            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS \
-              "sudo apt-get update && sudo apt-get install -y git"
+            # Create the deployment script
+            cat > deploy.sh << 'DEPLOY_SCRIPT'
+            #!/usr/bin/env bash
+            set -e
             
-            # Then run the deployment script with proper environment variables
+            # Configuration
+            DEPLOY_DIR="\$HOME/Source-Code"
+            REPO_URL="https://github.com/GroupA-DevOpsSec-2025/Source-Code.git"
+            BRANCH="main"
+            
+            echo "Starting deployment to \$DEPLOY_DIR"
+            
+            # Clean previous deployment
+            [ -d "\$DEPLOY_DIR" ] && rm -rf "\$DEPLOY_DIR"
+            
+            # Clone repository
+            git clone -b "\$BRANCH" "\$REPO_URL" "\$DEPLOY_DIR"
+            cd "\$DEPLOY_DIR"
+            
+            # Install Node.js if needed
+            if ! command -v node &>/dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs nginx
+              sudo npm install -g npm@latest pm2
+            fi
+            
+            # Install dependencies and build
+            npm install
+            npm run build
+            
+            # Deploy frontend
+            sudo rm -rf /var/www/html/*
+            sudo cp -a build/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
+            sudo chmod -R 755 /var/www/html
+            
+            # Configure Nginx
+            sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<'NGINX_CONFIG'
+            server {
+              listen 80;
+              server_name _;
+              root /var/www/html;
+              
+              location / {
+                try_files \$uri /index.html;
+              }
+              
+              location /api {
+                proxy_pass http://localhost:3001;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+                proxy_set_header Content-Type \$content_type;
+                proxy_buffering off;
+                proxy_read_timeout 300s;
+              }
+            }
+            NGINX_CONFIG
+            
+            sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
+            sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+            
+            # Setup backend
+            cd server
+            npm install
+            pm2 delete todo-api 2>/dev/null || true
+            pm2 start ./bin/www --name todo-api --wait-ready
+            pm2 save
+            pm2 startup || true
+            
+            # Restart Nginx
+            sudo nginx -t && sudo systemctl restart nginx
+            
+            echo "Deployment successful!"
+            echo "Frontend: http://\$EC2_PUBLIC_DNS"
+            echo "API: http://\$EC2_PUBLIC_DNS/api/todos"
+            DEPLOY_SCRIPT
+            
+            # Make script executable
+            chmod +x deploy.sh
+      - run:
+          name: Transfer and execute deployment
+          command: |
+            # Transfer files
+            scp -i ~/.ssh/ec2_key deploy.sh $EC2_USERNAME@$EC2_PUBLIC_DNS:~/deploy.sh
+            
+            # Execute deployment
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
               $EC2_USERNAME@$EC2_PUBLIC_DNS \
-              "export REPO_URL='$(git remote get-url origin)'; \
-               export BRANCH='main'; \
-               export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; \
-               export EC2_USERNAME='$EC2_USERNAME'; \
-               bash -s" < deploy.sh
+              "export EC2_PUBLIC_DNS='$EC2_PUBLIC_DNS'; bash ~/deploy.sh"

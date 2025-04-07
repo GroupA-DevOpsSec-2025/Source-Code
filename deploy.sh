@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 set -e  # Exit immediately if any command fails
 
-# Log the start of deployment
-echo "Starting deployment process..."
-echo "Repository: $REPO_URL"
-echo "Branch: $BRANCH"
+# Deployment directory
+DEPLOY_DIR="$HOME/Source-Code"
+echo "Deploying to: $DEPLOY_DIR"
 
-# Install prerequisites
-echo "Installing system dependencies..."
-sudo apt-get update
-sudo apt-get install -y git
+# Clean previous deployment if exists
+if [ -d "$DEPLOY_DIR" ]; then
+  echo "Removing existing deployment directory..."
+  rm -rf "$DEPLOY_DIR"
+fi
 
-# Node.js setup if not installed
+# Clone repository
+echo "Cloning repository..."
+git clone -b "$BRANCH" "$REPO_URL" "$DEPLOY_DIR"
+cd "$DEPLOY_DIR"
+
+# Verify repository contents
+echo "Repository contents:"
+ls -la
+
+# Install Node.js if needed
 if ! command -v node &>/dev/null; then
   echo "Installing Node.js..."
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -19,43 +28,22 @@ if ! command -v node &>/dev/null; then
   sudo npm install -g npm@latest pm2
 fi
 
-# Set deployment directory
-DEPLOY_DIR="$HOME/Source-Code"
-echo "Deploying to: $DEPLOY_DIR"
-
-# Clone or update repository
-if [ -d "$DEPLOY_DIR" ]; then
-  echo "Updating existing repository..."
-  cd "$DEPLOY_DIR"
-  git fetch origin
-  git checkout -f $BRANCH
-  git reset --hard origin/$BRANCH
-else
-  echo "Cloning new repository..."
-  git clone -b $BRANCH $REPO_URL "$DEPLOY_DIR"
-  cd "$DEPLOY_DIR"
-fi
-
-# Verify repository contents
-echo "Repository contents:"
-ls -la
-
-# Install project dependencies
-echo "Installing Node.js dependencies..."
+# Install dependencies
+echo "Installing dependencies..."
 npm install
 
 # Build frontend
 echo "Building frontend..."
 npm run build
 
-# Frontend deployment
-echo "Deploying frontend to /var/www/html..."
+# Deploy frontend
+echo "Deploying frontend..."
 sudo rm -rf /var/www/html/*
 sudo cp -a build/* /var/www/html/
 sudo chown -R www-data:www-data /var/www/html
 sudo chmod -R 755 /var/www/html
 
-# Nginx configuration
+# Configure Nginx
 echo "Configuring Nginx..."
 sudo tee /etc/nginx/sites-available/todo-app >/dev/null <<'EOF'
 server {
@@ -83,7 +71,7 @@ server {
 }
 EOF
 
-# Enable Nginx configuration
+# Enable Nginx config
 sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
@@ -92,21 +80,17 @@ echo "Setting up backend..."
 cd server
 npm install
 
-# PM2 process management
-echo "Starting backend with PM2..."
+# Start with PM2
+echo "Starting backend..."
 pm2 delete todo-api 2>/dev/null || true
 pm2 start ./bin/www --name todo-api --wait-ready
 pm2 save
 pm2 startup || true
 
 # Restart Nginx
-echo "Restarting Nginx..."
 sudo nginx -t && sudo systemctl restart nginx
 
-# Verify deployment
 echo ""
 echo "Deployment successful!"
 echo "Frontend: http://$EC2_PUBLIC_DNS"
-echo "Backend API: http://$EC2_PUBLIC_DNS/api/todos"
-echo "PM2 Status:"
-pm2 list
+echo "API: http://$EC2_PUBLIC_DNS/api/todos"
