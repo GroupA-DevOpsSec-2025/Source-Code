@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            # Create deploy.sh using echo statements
+            # Create deploy.sh using echo statements with escaped heredocs
             echo '#!/usr/bin/env bash' > deploy.sh
             echo 'set -e' >> deploy.sh
             echo '' >> deploy.sh
@@ -79,13 +79,13 @@ jobs:
             echo '' >> deploy.sh
             echo '# Setup SSL certificates' >> deploy.sh
             echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
-            echo 'cat > /etc/ssl/private/privatekey.pem <<EOF' >> deploy.sh
+            echo 'cat > /etc/ssl/private/privatekey.pem \<\<EOF' >> deploy.sh
             echo '-----BEGIN PRIVATE KEY-----' >> deploy.sh
             echo '$PRIVATE_KEY' >> deploy.sh
             echo '-----END PRIVATE KEY-----' >> deploy.sh
             echo 'EOF' >> deploy.sh
             echo '' >> deploy.sh
-            echo 'cat > /etc/ssl/certs/server.crt <<EOF' >> deploy.sh
+            echo 'cat > /etc/ssl/certs/server.crt \<\<EOF' >> deploy.sh
             echo '-----BEGIN CERTIFICATE-----' >> deploy.sh
             echo '$SERVER_CERT' >> deploy.sh
             echo '-----END CERTIFICATE-----' >> deploy.sh
@@ -96,7 +96,7 @@ jobs:
             echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
             echo '' >> deploy.sh
             echo '# Configure Nginx' >> deploy.sh
-            echo 'cat > /etc/nginx/sites-available/todo-app <<EOF' >> deploy.sh
+            echo 'cat > /etc/nginx/sites-available/todo-app \<\<EOF' >> deploy.sh
             echo 'server {' >> deploy.sh
             echo '  listen 80;' >> deploy.sh
             echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
