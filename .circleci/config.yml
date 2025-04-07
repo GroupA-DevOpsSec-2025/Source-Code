@@ -53,7 +53,7 @@ jobs:
       - run:
           name: Create deployment script
           command: |
-            # Create deploy.sh using echo statements
+            # Create deploy.sh using only echo statements
             echo '#!/usr/bin/env bash' > deploy.sh
             echo 'set -e' >> deploy.sh
             
@@ -75,23 +75,23 @@ jobs:
             echo 'sudo cp -a build/* /var/www/html/' >> deploy.sh
             echo 'sudo chown -R www-data:www-data /var/www/html' >> deploy.sh
             
-            # SSL Certificate Setup - using multiple echo statements
+            # SSL Certificate Setup - using direct echo commands
             echo 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs' >> deploy.sh
-            echo 'sudo bash -c "cat > /etc/ssl/private/privatekey.pem <<\"PRIVATE_EOF\""' >> deploy.sh
+            echo 'sudo tee /etc/ssl/private/privatekey.pem <<END_PRIVATE_KEY >/dev/null' >> deploy.sh
             echo '-----BEGIN PRIVATE KEY-----' >> deploy.sh
             echo '$PRIVATE_KEY' >> deploy.sh
             echo '-----END PRIVATE KEY-----' >> deploy.sh
-            echo 'PRIVATE_EOF' >> deploy.sh
-            echo 'sudo bash -c "cat > /etc/ssl/certs/server.crt <<\"CERT_EOF\""' >> deploy.sh
+            echo 'END_PRIVATE_KEY' >> deploy.sh
+            echo 'sudo tee /etc/ssl/certs/server.crt <<END_CERTIFICATE >/dev/null' >> deploy.sh
             echo '-----BEGIN CERTIFICATE-----' >> deploy.sh
             echo '$SERVER_CERT' >> deploy.sh
             echo '-----END CERTIFICATE-----' >> deploy.sh
-            echo 'CERT_EOF' >> deploy.sh
+            echo 'END_CERTIFICATE' >> deploy.sh
             echo 'sudo chmod 600 /etc/ssl/private/privatekey.pem' >> deploy.sh
             echo 'sudo chmod 644 /etc/ssl/certs/server.crt' >> deploy.sh
             
-            # Nginx Configuration - using multiple echo statements
-            echo 'sudo bash -c "cat > /etc/nginx/sites-available/todo-app <<\"NGINX_EOF\""' >> deploy.sh
+            # Nginx Configuration - using direct echo commands
+            echo 'sudo tee /etc/nginx/sites-available/todo-app <<END_NGINX >/dev/null' >> deploy.sh
             echo 'server {' >> deploy.sh
             echo '  listen 80;' >> deploy.sh
             echo '  server_name $EC2_PUBLIC_DNS;' >> deploy.sh
@@ -117,7 +117,7 @@ jobs:
             echo '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> deploy.sh
             echo '  }' >> deploy.sh
             echo '}' >> deploy.sh
-            echo 'NGINX_EOF' >> deploy.sh
+            echo 'END_NGINX' >> deploy.sh
             
             # Finalize setup
             echo 'sudo ln -sf /etc/nginx/sites-available/todo-app /etc/nginx/sites-enabled/' >> deploy.sh
