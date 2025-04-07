@@ -51,7 +51,7 @@ server {
   ssl_certificate_key /etc/ssl/private/privatekey.pem;
   root /var/www/html;
   location / {
-    try_files $uri /index.html;
+    try_files $uri $uri/ /index.html;
   }
   location /api {
     proxy_pass http://localhost:3001;
