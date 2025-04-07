@@ -4,10 +4,7 @@ workflows:
   version: 2
   build-deploy:
     jobs:
-      - build:
-          filters:
-            branches:
-              only: main
+      - build
       - deploy:
           requires:
             - build
@@ -47,17 +44,13 @@ jobs:
               echo "ERROR: Found localhost API references in frontend code!"
               exit 1
             fi
-      - persist_to_workspace:
-          root: .
-          paths: .
 
   deploy:
     working_directory: ~/Source-Code
     docker:
       - image: cimg/node:20.14.0
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
       - run:
           name: Setup SSH
           command: |
@@ -66,10 +59,12 @@ jobs:
             chmod 600 ~/.ssh/ec2_key
             ssh-keyscan $EC2_PUBLIC_DNS >> ~/.ssh/known_hosts
       - run:
-          name: Transfer files and deploy
+          name: Trigger deployment
           command: |
-            scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              deploy.tar.gz nginx-config \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS:/tmp/
             ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
-              $EC2_USERNAME@$EC2_PUBLIC_DNS "export EC2_PUBLIC_DNS=\"$EC2_PUBLIC_DNS\"; export EC2_USERNAME=\"$EC2_USERNAME\"; bash /tmp/deploy.sh"
+              $EC2_USERNAME@$EC2_PUBLIC_DNS \
+              "export REPO_URL=$(git config --get remote.origin.url); \
+               export BRANCH=main; \
+               export EC2_PUBLIC_DNS=$EC2_PUBLIC_DNS; \
+               export EC2_USERNAME=$EC2_USERNAME; \
+               bash -s" < deploy.sh
